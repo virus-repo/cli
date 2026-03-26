@@ -1,1 +1,549 @@
+// cli.hcs – stylizacja kolorów i parsowanie argumentów CLI
+// Użycie: from [cli] require [Color, Style, Parser, red, green, bold, reset, ...]
 
+from [std] require [io, string, math]
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Style kolorów (ANSI)
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum Color
+    Black
+    Red
+    Green
+    Yellow
+    Blue
+    Magenta
+    Cyan
+    White
+    BrightBlack
+    BrightRed
+    BrightGreen
+    BrightYellow
+    BrightBlue
+    BrightMagenta
+    BrightCyan
+    BrightWhite
+end
+
+enum StyleModifier
+    Bold
+    Dim
+    Italic
+    Underline
+    Blink
+    Reverse
+    Hidden
+    Strikethrough
+end
+
+/// Obiekt przechowujący sekwencję stylów (kody ANSI)
+obj Style
+    codes: [str]
+end
+
+// Stałe ANSI – mapowanie kolorów na kody
+fn color_code(c: Color, fg: bool) : str
+    let base = if fg { 30 } else { 40 }
+    match c
+        Color.Black        => return format("\x1b[{}m", base)
+        Color.Red          => return format("\x1b[{}m", base + 1)
+        Color.Green        => return format("\x1b[{}m", base + 2)
+        Color.Yellow       => return format("\x1b[{}m", base + 3)
+        Color.Blue         => return format("\x1b[{}m", base + 4)
+        Color.Magenta      => return format("\x1b[{}m", base + 5)
+        Color.Cyan         => return format("\x1b[{}m", base + 6)
+        Color.White        => return format("\x1b[{}m", base + 7)
+        Color.BrightBlack  => return format("\x1b[{}m", base + 60)
+        Color.BrightRed    => return format("\x1b[{}m", base + 61)
+        Color.BrightGreen  => return format("\x1b[{}m", base + 62)
+        Color.BrightYellow => return format("\x1b[{}m", base + 63)
+        Color.BrightBlue   => return format("\x1b[{}m", base + 64)
+        Color.BrightMagenta=> return format("\x1b[{}m", base + 65)
+        Color.BrightCyan   => return format("\x1b[{}m", base + 66)
+        Color.BrightWhite  => return format("\x1b[{}m", base + 67)
+    end
+end
+
+fn modifier_code(m: StyleModifier) : str
+    match m
+        StyleModifier.Bold          => return "\x1b[1m"
+        StyleModifier.Dim           => return "\x1b[2m"
+        StyleModifier.Italic        => return "\x1b[3m"
+        StyleModifier.Underline     => return "\x1b[4m"
+        StyleModifier.Blink         => return "\x1b[5m"
+        StyleModifier.Reverse       => return "\x1b[7m"
+        StyleModifier.Hidden        => return "\x1b[8m"
+        StyleModifier.Strikethrough => return "\x1b[9m"
+    end
+end
+
+fn reset_style() : str
+    return "\x1b[0m"
+end
+
+// Funkcje pomocnicze do tworzenia stylów
+fn style_new() : Style
+    let s = HCS_ALLOC_ZERO(_scope_arena, Style)
+    s.codes = []
+    return s
+end
+
+fn style_fg(s: Style, c: Color) : Style
+    s.codes.push(color_code(c, true))
+    return s
+end
+
+fn style_bg(s: Style, c: Color) : Style
+    s.codes.push(color_code(c, false))
+    return s
+end
+
+fn style_add(s: Style, m: StyleModifier) : Style
+    s.codes.push(modifier_code(m))
+    return s
+end
+
+fn style_apply(s: Style, text: str) : str
+    let mut out = "" as str
+    for code in s.codes
+        out += code
+    end
+    out += text
+    out += reset_style()
+    return out
+end
+
+// Predefiniowane style (dla wygody)
+fn red(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Red)
+    return style_apply(s, text)
+end
+
+fn green(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Green)
+    return style_apply(s, text)
+end
+
+fn blue(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Blue)
+    return style_apply(s, text)
+end
+
+fn yellow(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Yellow)
+    return style_apply(s, text)
+end
+
+fn cyan(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Cyan)
+    return style_apply(s, text)
+end
+
+fn magenta(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Magenta)
+    return style_apply(s, text)
+end
+
+fn white(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.White)
+    return style_apply(s, text)
+end
+
+fn bold(text: str) : str
+    let s = style_new()
+    style_add(s, StyleModifier.Bold)
+    return style_apply(s, text)
+end
+
+fn dim(text: str) : str
+    let s = style_new()
+    style_add(s, StyleModifier.Dim)
+    return style_apply(s, text)
+end
+
+fn underline(text: str) : str
+    let s = style_new()
+    style_add(s, StyleModifier.Underline)
+    return style_apply(s, text)
+end
+
+fn italic(text: str) : str
+    let s = style_new()
+    style_add(s, StyleModifier.Italic)
+    return style_apply(s, text)
+end
+
+// Kombinowane style
+fn error(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Red)
+    style_add(s, StyleModifier.Bold)
+    return style_apply(s, text)
+end
+
+fn success(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Green)
+    style_add(s, StyleModifier.Bold)
+    return style_apply(s, text)
+end
+
+fn warning(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Yellow)
+    style_add(s, StyleModifier.Bold)
+    return style_apply(s, text)
+end
+
+fn info(text: str) : str
+    let s = style_new()
+    style_fg(s, Color.Cyan)
+    return style_apply(s, text)
+end
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Parsowanie argumentów CLI (lexopt‑style)
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum OptType
+    Flag        // bez wartości (true/false)
+    Value       // wymagana wartość
+    Option      // opcjonalna wartość z domyślną
+end
+
+/// Definicja opcji
+obj OptDef
+    short: str      // np. "v"
+    long: str       // np. "verbose"
+    help: str       // tekst pomocy
+    opt_type: OptType
+    default: str    // tylko dla Option
+    found: bool     // czy wystąpiło
+    value: str      // przechowywana wartość (dla Value/Option)
+end
+
+/// Główny parser
+obj Parser
+    opts: [OptDef]
+    args: [str]         // oryginalne argumenty (bez argv[0])
+    remaining: [str]    // pozycyjne argumenty po przetworzeniu
+    help_requested: bool
+end
+
+/// Tworzy nowy parser, inicjowany z argc/argv z main.
+/// Uwaga: argv[0] jest pomijane.
+fn parser_new(argc: i32, argv: ptr(ptr(u8))) : Parser
+    let p = HCS_ALLOC_ZERO(_scope_arena, Parser)
+    p.opts = []
+    p.args = []
+    p.remaining = []
+    p.help_requested = false
+
+    // Kopiujemy argumenty (pomijamy argv[0])
+    for i in 1..argc
+        let arg_ptr = argv[i] as ptr(u8)
+        let len = strlen(arg_ptr)
+        let buf = HCS_ALLOC_N(_scope_arena, u8, len+1)
+        memcpy(buf, arg_ptr, len)
+        buf[len] = 0
+        p.args.push(buf as str)
+    end
+    return p
+end
+
+/// Dodaje flagę (przełącznik)
+fn flag(p: Parser, short: str, long: str, help: str)
+    let opt = HCS_ALLOC_ZERO(_scope_arena, OptDef)
+    opt.short = short
+    opt.long = long
+    opt.help = help
+    opt.opt_type = OptType.Flag
+    opt.found = false
+    opt.value = ""
+    p.opts.push(opt)
+end
+
+/// Dodaje opcję z wymaganą wartością (np. --output plik)
+fn value_opt(p: Parser, short: str, long: str, help: str)
+    let opt = HCS_ALLOC_ZERO(_scope_arena, OptDef)
+    opt.short = short
+    opt.long = long
+    opt.help = help
+    opt.opt_type = OptType.Value
+    opt.found = false
+    opt.value = ""
+    p.opts.push(opt)
+end
+
+/// Dodaje opcję z opcjonalną wartością i domyślną
+fn option_opt(p: Parser, short: str, long: str, help: str, default: str)
+    let opt = HCS_ALLOC_ZERO(_scope_arena, OptDef)
+    opt.short = short
+    opt.long = long
+    opt.help = help
+    opt.opt_type = OptType.Option
+    opt.default = default
+    opt.found = false
+    opt.value = default
+    p.opts.push(opt)
+end
+
+/// Funkcja pomocnicza do wyszukiwania opcji
+fn find_opt(p: Parser, name: str) : Option<OptDef>
+    for opt in p.opts
+        if opt.short == name or opt.long == name
+            return opt
+        end
+    end
+    return nil
+end
+
+/// Parsuje argumenty, zwraca true jeśli sukces, false jeśli błąd.
+/// W przypadku --help ustawia help_requested = true.
+fn parse(p: Parser) : bool
+    let mut i = 0
+    let mut pos_args = [] as [str]
+    while i < p.args.len
+        let arg = p.args[i]
+        // -- oznacza koniec opcji
+        if arg == "--"
+            i += 1
+            // pozostałe argumenty są pozycyjne
+            while i < p.args.len
+                pos_args.push(p.args[i])
+                i += 1
+            end
+            break
+        end
+        // długie opcje: --nazwa lub --nazwa=wartość
+        if arg.len >= 2 and arg.ptr[0] as i32 == 45 and arg.ptr[1] as i32 == 45
+            let name_val = arg.ptr[2..] as str
+            let eq_pos = -1
+            for j in 0..name_val.len
+                if name_val.ptr[j] as i32 == 61  // '='
+                    eq_pos = j
+                    break
+                end
+            end
+            let name = if eq_pos >= 0
+                name_val.ptr[0..eq_pos] as str
+            else
+                name_val
+            end
+            let value = if eq_pos >= 0
+                name_val.ptr[eq_pos+1..] as str
+            else
+                ""
+            end
+            let opt = find_opt(p, name)
+            if opt == nil
+                eprintln(error(format("unknown option: --{}", name)))
+                return false
+            end
+            match opt.opt_type
+                OptType.Flag =>
+                    if value != ""
+                        eprintln(error(format("flag --{} cannot take a value", name)))
+                        return false
+                    end
+                    opt.found = true
+                    opt.value = "true"
+                OptType.Value =>
+                    if value == ""
+                        if i+1 >= p.args.len
+                            eprintln(error(format("option --{} requires a value", name)))
+                            return false
+                        end
+                        value = p.args[i+1]
+                        i += 1
+                    end
+                    opt.found = true
+                    opt.value = value
+                OptType.Option =>
+                    if value == ""
+                        if i+1 < p.args.len and p.args[i+1].ptr[0] as i32 != 45
+                            value = p.args[i+1]
+                            i += 1
+                        else
+                            value = opt.default
+                        end
+                    end
+                    opt.found = true
+                    opt.value = value
+            end
+        // krótkie opcje: -abc (mogą być łączone)
+        else if arg.len >= 2 and arg.ptr[0] as i32 == 45 and arg.ptr[1] as i32 != 45
+            let mut j = 1
+            while j < arg.len
+                let ch = arg.ptr[j] as i32
+                let name = ch as char
+                let opt = find_opt(p, name)
+                if opt == nil
+                    eprintln(error(format("unknown option: -{}", name)))
+                    return false
+                end
+                match opt.opt_type
+                    OptType.Flag =>
+                        opt.found = true
+                        opt.value = "true"
+                        j += 1
+                    OptType.Value =>
+                        // wartość może być w tym samym argumencie lub następnym
+                        if j+1 < arg.len
+                            let value = arg.ptr[j+1..] as str
+                            opt.found = true
+                            opt.value = value
+                            j = arg.len
+                        else
+                            if i+1 >= p.args.len
+                                eprintln(error(format("option -{} requires a value", name)))
+                                return false
+                            end
+                            let value = p.args[i+1]
+                            opt.found = true
+                            opt.value = value
+                            i += 1
+                            j = arg.len
+                        end
+                    OptType.Option =>
+                        if j+1 < arg.len
+                            let value = arg.ptr[j+1..] as str
+                            opt.found = true
+                            opt.value = value
+                            j = arg.len
+                        else
+                            if i+1 < p.args.len and p.args[i+1].ptr[0] as i32 != 45
+                                let value = p.args[i+1]
+                                opt.found = true
+                                opt.value = value
+                                i += 1
+                                j = arg.len
+                            else
+                                opt.found = true
+                                opt.value = opt.default
+                                j += 1
+                            end
+                        end
+                end
+            end
+        // argument pozycyjny
+        else
+            pos_args.push(arg)
+        end
+        i += 1
+    end
+    p.remaining = pos_args
+
+    // Sprawdź, czy --help zostało podane (jako opcja)
+    let help_opt = find_opt(p, "help")
+    if help_opt != nil and help_opt.found
+        p.help_requested = true
+    end
+    return true
+end
+
+/// Zwraca wartość opcji (jako str) lub nil jeśli nie znaleziona
+fn get_opt(p: Parser, name: str) : Option<str>
+    let opt = find_opt(p, name)
+    if opt == nil or not opt.found
+        return nil
+    end
+    return opt.value
+end
+
+/// Zwraca true jeśli flaga była podana
+fn has_flag(p: Parser, name: str) : bool
+    let opt = find_opt(p, name)
+    return opt != nil and opt.found and opt.opt_type == OptType.Flag
+end
+
+/// Zwraca wartość opcji typu Value/Option, lub default jeśli nie podana
+fn get_opt_or(p: Parser, name: str, default: str) : str
+    let v = get_opt(p, name)
+    if v == nil then return default else return v end
+end
+
+/// Zwraca listę argumentów pozycyjnych
+fn get_positional(p: Parser) : [str]
+    return p.remaining
+end
+
+/// Drukuje pomoc na podstawie zdefiniowanych opcji
+fn print_help(p: Parser, program_name: str)
+    eprintln(bold("Usage:") + " " + program_name + " [OPTIONS] [ARGS]")
+    eprintln()
+    eprintln(bold("Options:"))
+    for opt in p.opts
+        let mut line = "  " as str
+        if opt.short != ""
+            line += "-" + opt.short
+            if opt.long != ""
+                line += ", "
+            end
+        end
+        if opt.long != ""
+            line += "--" + opt.long
+        end
+        // wypełnij do 24 znaków
+        let padding = 24 - line.len
+        if padding > 0
+            line += " " * padding
+        else
+            line += " "
+        end
+        line += opt.help
+        if opt.opt_type == OptType.Option
+            line += " (default: " + opt.default + ")"
+        end
+        eprintln(line)
+    end
+end
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Przykład użycia (komentarz)
+// ──────────────────────────────────────────────────────────────────────────────
+/*
+from [cli] require [Parser, flag, value_opt, parse, has_flag, get_opt, get_positional, print_help, green, red]
+
+fn main(argc: i32, argv: ptr(ptr(u8))) : i32
+    let parser = parser_new(argc, argv)
+
+    // Definiowanie opcji
+    flag(parser, "v", "verbose", "Enable verbose output")
+    flag(parser, "h", "help", "Show this help message")
+    value_opt(parser, "o", "output", "Output file")
+
+    if not parse(parser)
+        return 1
+    end
+
+    if has_flag(parser, "help")
+        print_help(parser, argv[0] as str)
+        return 0
+    end
+
+    if has_flag(parser, "verbose")
+        eprintln(green("Verbose mode enabled"))
+    end
+
+    let outfile = get_opt(parser, "output")
+    if outfile != nil
+        eprintln("Output file: " + outfile)
+    end
+
+    let positional = get_positional(parser)
+    for arg in positional
+        eprintln("Positional argument: " + arg)
+    end
+
+    return 0
+end
+*/
